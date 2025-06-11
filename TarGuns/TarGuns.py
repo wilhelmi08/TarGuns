@@ -2,8 +2,34 @@ import pygame
 import time
 import random
 import sys
+import json
+import os
+
 
 pygame.init()
+
+def save_game(credits=None, volume=None):
+    data = {}
+    if os.path.exists("save_data.json"):
+        with open("save_data.json", "r") as f:
+            data = json.load(f)
+
+    if score is not None:
+        data["credits"] = int(credits)
+    if volume is not None:
+        data["volume"] = float(volume)
+
+    with open("save_data.json", "w") as f:
+        json.dump(data, f)
+
+def load_game():
+    if os.path.exists("save_data.json"):
+        with open("save_data.json", "r") as f:
+            data = json.load(f)
+            return data.get("credits", 0), data.get("volume", 1.0)
+    return 0, 1.0
+
+credits, volume = load_game()
 
 # Screen setup
 WIDTH, HEIGHT = 913, 408
@@ -72,7 +98,10 @@ reload_duration = 3  # seconds
 wave = 1
 points_per_target = 1
 bonus_per_wave = 10
-score = 0
+
+if credits == None:
+    credits = 0  # Initialize score if not loaded
+
 wave_in_progress = False
 between_waves = False
 between_waves_start = None
@@ -171,7 +200,8 @@ def show_menu():
                     return "settings"
         clock.tick(60)
 
-volume = 1.0  # 1.0 = 100%
+if volume == None:
+    volume = 1.0  # Default volume if not loaded
 
 def show_settings():
     global volume
@@ -220,6 +250,7 @@ def show_settings():
                 mx, my = event.pos
                 # Check back button
                 if back_rect.collidepoint(mx, my):
+                    save_game(volume=volume)
                     return
                 # Check knob drag
                 if (mx - knob_pos) ** 2 + (my - (slider_y + slider_height // 2)) ** 2 <= knob_radius ** 2:
@@ -254,6 +285,7 @@ while running:
 
     if menu_choice == "start":
         # Initialize game state
+        credits, volume = load_game()
         game_started = False
         game_over = False
         game_over_start = None
@@ -263,6 +295,10 @@ while running:
         reloading = False
         wave = 1
         score = 0
+
+        # Set volume for sounds after loading
+        pistol_sound.set_volume(volume)
+        empty_sound.set_volume(volume)
 
         # Start the game
         while not game_over:
@@ -329,6 +365,8 @@ while running:
                                     active_targets.remove(target)
                                     player_health -= damage_per_missed_target
                                     if player_health <= 0:
+                                        credits += int(score)
+                                        save_game(credits=credits, volume=volume)
                                         game_over = True
 
                             screen.blit(target["image"], rect)
@@ -387,12 +425,26 @@ while running:
                     else:
                         screen.blit(gun_fire_frames[0], (gun_x, gun_y))
 
+                    # Quit button (top right)
+                    quit_button_rect = pygame.Rect(WIDTH - 130, 10, 120, 40)
+                    pygame.draw.rect(screen, BUTTON_COLOR, quit_button_rect, border_radius=8)
+                    quit_text = font_small.render("Quit", True, WHITE)
+                    quit_text_rect = quit_text.get_rect(center=quit_button_rect.center)
+                    screen.blit(quit_text, quit_text_rect)
+
             # Event handling: only accept input if NOT game over
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     pygame.quit()
                     sys.exit()
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if quit_button_rect.collidepoint(event.pos):
+                        credits += int(score)
+                        save_game(credits=credits, volume=volume)
+                        game_over = True
+                        break
 
                 if not game_over and event.type == pygame.MOUSEBUTTONDOWN and game_started:
                     if not reloading and ammo > 0 and wave_in_progress:
