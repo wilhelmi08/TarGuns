@@ -176,7 +176,7 @@ def spawn_box(existing_rects):
         if all(not new_rect.colliderect(existing) for existing in existing_rects):
             return {
                 "rect": new_rect,
-                "target_y": random.uniform(300, 0),
+                "target_y": random.uniform(250, 50),
                 "speed": BOX_SPEED,
                 "image": image,
                 "at_target_time": None
@@ -420,14 +420,16 @@ def show_store():
                 # Check if any item box is clicked
                 for box_rect, item in item_boxes:
                     if box_rect.collidepoint(event.pos):
-                        if not item["owned"]:
+                        if equipped == item["id"]:
+                            show_upgrade_screen(equipped, owned_items)
+                        elif not item["owned"]:
                             if show_purchase_dialog(item):
                                 if credits >= item["price"]:
                                     credits -= item["price"]
                                     owned_items.add(item["id"])
                                     save_ownership()
                                 else:
-                                    # Not enough credits dialog
+                                    # ...existing not enough credits dialog...
                                     dialog_width, dialog_height = 350, 120
                                     dialog_x = WIDTH // 2 - dialog_width // 2
                                     dialog_y = HEIGHT // 2 - dialog_height // 2
@@ -455,6 +457,181 @@ def show_store():
                             # Equip the weapon if owned
                             equipped = item["id"]
                             save_ownership()
+        clock.tick(60)
+
+def show_upgrade_screen(equipped, owned_items):
+    global credits
+    # Load current upgrades from save_data.json
+    upgrades = {}
+    if os.path.exists("save_data.json"):
+        with open("save_data.json", "r") as f:
+            data = json.load(f)
+            upgrades = data.get("upgrades", {})
+    weapon_upgrades = upgrades.get(equipped, {"magazine": 0, "reload": 0})
+
+    # Upgrade parameters
+    base_magazine = 17 if equipped == "pistol" else 30
+    base_reload = 3.0 if equipped == "pistol" else 5.0
+    reload_min = 1.5 if equipped == "pistol" else 2.5
+    mag_upgrade_cost = 500 * (weapon_upgrades.get("magazine", 0) + 1)
+    reload_upgrade_cost = 700 * (weapon_upgrades.get("reload", 0) + 1)
+    max_mag_upgrade = 5
+    max_reload_upgrade = int((base_reload - reload_min) / 0.5)
+
+    scroll_y = 0
+    scroll_speed = 30  # for wheel/keys
+    dragging = False
+    drag_start_y = 0
+    scroll_start_y = 0
+
+    while True:
+        screen.fill(BLUE)
+        # Title (fixed)
+        title = font_large.render("UPGRADE", True, WHITE)
+        title_rect = title.get_rect(center=(WIDTH // 2, 70))
+        screen.blit(title, title_rect)
+
+        # Back button (fixed)
+        back_rect = pygame.Rect(20, 20, 100, 40)
+        button_surf = pygame.Surface((back_rect.width, back_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(button_surf, BUTTON_COLOR, button_surf.get_rect(), border_radius=8)
+        back_text = font_small.render("Back", True, WHITE)
+        back_text_rect = back_text.get_rect(center=button_surf.get_rect().center)
+        button_surf.blit(back_text, back_text_rect)
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_pressed = pygame.mouse.get_pressed()[0]
+        if back_rect.collidepoint(mouse_pos):
+            darken = pygame.Surface((back_rect.width, back_rect.height), pygame.SRCALPHA)
+            alpha = 80 if mouse_pressed else 40
+            darken.fill((0, 0, 0, alpha))
+            button_surf.blit(darken, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            button_surf.blit(back_text, back_text_rect)
+        screen.blit(button_surf, back_rect.topleft)
+
+        # Credits (fixed)
+        credits_text = font_small.render(f"Credits: {credits}", True, TEXT_COLOR)
+        credits_rect = credits_text.get_rect(topright=(WIDTH - 20, 20))
+        screen.blit(credits_text, credits_rect)
+
+        # --- SCROLLABLE AREA CLIP ---
+        scroll_clip_rect = pygame.Rect(0, 120, WIDTH, HEIGHT - 120)  # 120px leaves room for title/bar
+        screen.set_clip(scroll_clip_rect)
+
+        # --- Scrollable area ---
+        center_x = WIDTH // 2
+        y = 150 + scroll_y
+        spacing = 55
+
+        # Magazine size
+        mag_level = weapon_upgrades.get("magazine", 0)
+        mag_size = base_magazine + mag_level * 3
+        mag_text = font_small.render(f"Magazine Size: {mag_size}", True, WHITE)
+        mag_text_rect = mag_text.get_rect(center=(center_x, y))
+        screen.blit(mag_text, mag_text_rect)
+        y += spacing
+
+        # Magazine upgrade price
+        mag_upgrade_text = font_small.render(f"Upgrade (+3): {mag_upgrade_cost} Credits", True, TEXT_COLOR)
+        mag_upgrade_text_rect = mag_upgrade_text.get_rect(center=(center_x, y))
+        screen.blit(mag_upgrade_text, mag_upgrade_text_rect)
+        y += spacing
+
+        # Magazine upgrade button
+        mag_upgrade_rect = pygame.Rect(center_x - 60, y - 20, 120, 40)
+        pygame.draw.rect(screen, BUTTON_COLOR, mag_upgrade_rect, border_radius=8)
+        mag_btn_text = font_small.render("Upgrade", True, WHITE)
+        mag_btn_rect = mag_btn_text.get_rect(center=mag_upgrade_rect.center)
+        screen.blit(mag_btn_text, mag_btn_rect)
+        if mag_level >= max_mag_upgrade:
+            max_text = font_small.render("Maxed", True, (255, 80, 80))
+            max_text_rect = max_text.get_rect(center=(center_x, y + 40))
+            screen.blit(max_text, max_text_rect)
+        y += spacing + 20
+
+        # Reload speed
+        reload_level = weapon_upgrades.get("reload", 0)
+        reload_time = max(reload_min, base_reload - reload_level * 0.5)
+        reload_text = font_small.render(f"Reload Time: {reload_time:.1f}s", True, WHITE)
+        reload_text_rect = reload_text.get_rect(center=(center_x, y + 20))
+        screen.blit(reload_text, reload_text_rect)
+        y += spacing
+
+        # Reload upgrade price
+        reload_upgrade_text = font_small.render(f"Upgrade (-0.5s): {reload_upgrade_cost} Credits", True, TEXT_COLOR)
+        reload_upgrade_text_rect = reload_upgrade_text.get_rect(center=(center_x, y + 20))
+        screen.blit(reload_upgrade_text, reload_upgrade_text_rect)
+        y += spacing
+
+        # Reload upgrade button
+        reload_upgrade_rect = pygame.Rect(center_x - 60, y - 20, 120, 40)
+        pygame.draw.rect(screen, BUTTON_COLOR, reload_upgrade_rect, border_radius=8)
+        reload_btn_text = font_small.render("Upgrade", True, WHITE)
+        reload_btn_rect = reload_btn_text.get_rect(center=reload_upgrade_rect.center)
+        screen.blit(reload_btn_text, reload_btn_rect)
+        if reload_level >= max_reload_upgrade:
+            max_text = font_small.render("Maxed", True, (255, 80, 80))
+            max_text_rect = max_text.get_rect(center=(center_x, y + 40))
+            screen.blit(max_text, max_text_rect)
+
+        # --- END SCROLLABLE AREA CLIP ---
+        screen.set_clip(None)
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if back_rect.collidepoint(event.pos):
+                    if back_rect.collidepoint(event.pos):
+                        # Save upgrades and return
+                        if os.path.exists("save_data.json"):
+                            with open("save_data.json", "r") as f:
+                                data = json.load(f)
+                        else:
+                            data = {}
+                        if "upgrades" not in data:
+                            data["upgrades"] = {}
+                        data["upgrades"][equipped] = weapon_upgrades
+                        with open("save_data.json", "w") as f:
+                            json.dump(data, f)
+                        return
+                # Check upgrade buttons FIRST (before dragging)
+                if mag_upgrade_rect.collidepoint(event.pos) and mag_level < max_mag_upgrade:
+                    if credits >= mag_upgrade_cost:
+                        credits -= mag_upgrade_cost
+                        weapon_upgrades["magazine"] = mag_level + 1
+                        mag_upgrade_cost = 500 * (weapon_upgrades["magazine"] + 1)
+                elif reload_upgrade_rect.collidepoint(event.pos) and reload_level < max_reload_upgrade:
+                    if credits >= reload_upgrade_cost:
+                        credits -= reload_upgrade_cost
+                        weapon_upgrades["reload"] = reload_level + 1
+                        reload_upgrade_cost = 700 * (weapon_upgrades["reload"] + 1)
+                # Prepare for possible drag
+                dragging = True
+                drag_start_y = event.pos[1]
+                scroll_start_y = scroll_y
+            elif event.type == pygame.MOUSEBUTTONUP:
+                dragging = False
+            elif event.type == pygame.MOUSEMOTION and dragging:
+                dy = event.pos[1] - drag_start_y
+                # Only start scrolling if the drag is more than a few pixels (to avoid accidental drags)
+                if abs(dy) > 5:
+                    scroll_y = scroll_start_y + dy
+            elif event.type == pygame.MOUSEWHEEL:
+                scroll_y += event.y * scroll_speed
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_DOWN:
+                    scroll_y -= scroll_speed
+                elif event.key == pygame.K_UP:
+                    scroll_y += scroll_speed
+
+        # Clamp scroll_y so you can't scroll too far
+        min_scroll = min(-200, HEIGHT - y - 150)  # Always allow at least 200px scroll up
+        max_scroll = 0
+        scroll_y = max(min_scroll, min(scroll_y, max_scroll))
+
         clock.tick(60)
 
 if volume == None:
@@ -518,24 +695,33 @@ def show_settings():
         pygame.display.flip()
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                # Check back button
-                if back_rect.collidepoint(mx, my):
-                    save_game(volume=volume)
-                    return
-                # ...rest of your slider logic...
-            elif event.type == pygame.MOUSEBUTTONUP:
-                dragging = False
-            elif event.type == pygame.MOUSEMOTION and dragging:
-                mx, my = event.pos
-                volume = (mx - slider_x) / slider_width
-                volume = max(0.0, min(1.0, volume))
-                pistol_sound.set_volume(volume)
-                empty_sound.set_volume(volume)
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        mx, my = event.pos
+                        # Check back button
+                        if back_rect.collidepoint(mx, my):
+                            save_game(volume=volume)
+                            return
+                        # Check if knob is clicked
+                        knob_pos = get_knob_pos()
+                        if (mx - knob_pos) ** 2 + (my - (slider_y + slider_height // 2)) ** 2 <= knob_radius ** 2:
+                            dragging = True
+                        # Also allow clicking anywhere on the slider bar to set volume
+                        elif slider_x <= mx <= slider_x + slider_width and slider_y - knob_radius <= my <= slider_y + slider_height + knob_radius:
+                            volume = (mx - slider_x) / slider_width
+                            volume = max(0.0, min(1.0, volume))
+                            pistol_sound.set_volume(volume)
+                            empty_sound.set_volume(volume)
+                    elif event.type == pygame.MOUSEBUTTONUP:
+                        dragging = False
+                    elif event.type == pygame.MOUSEMOTION and dragging:
+                        mx, my = event.pos
+                        volume = (mx - slider_x) / slider_width
+                        volume = max(0.0, min(1.0, volume))
+                        pistol_sound.set_volume(volume)
+                        empty_sound.set_volume(volume)
 
         clock.tick(60)
 
@@ -556,19 +742,27 @@ while running:
         # Load equipped weapon
         equipped = "pistol"
         owned_items = {"pistol"}
+        weapon_upgrades = {"magazine": 0}
         if os.path.exists("save_data.json"):
             with open("save_data.json", "r") as f:
                 data = json.load(f)
                 equipped = data.get("equipped", "pistol")
                 owned_items = set(data.get("owned_items", ["pistol"]))
+                upgrades = data.get("upgrades", {})
+                weapon_upgrades = upgrades.get(equipped, {"magazine": 0})
 
         # Set weapon stats and load correct spritesheet based on equipped weapon
         if equipped == "ak":
-            AMMO_MAX = 30
-            reload_duration = 2
+            base_mag = 30
+            mag_upgrade = weapon_upgrades.get("magazine", 0)
+            reload_level = weapon_upgrades.get("reload", 0)
+            base_reload = 5.0
+            reload_min = 2.5
+            reload_duration = max(reload_min, base_reload - reload_level * 0.5)
+            AMMO_MAX = base_mag + mag_upgrade * 3
             fire_rate = 0.08  # seconds between shots
             is_auto = True
-            # Load AK spritesheet and scale frames to 0.3
+            # Load AK spritesheet and scale frames to 0.5
             gun_sprite_sheet = pygame.image.load("akAnimation.png").convert_alpha()
             frame_width = 195
             frame_height = 454
@@ -588,8 +782,13 @@ while running:
             gun_x = WIDTH // 2 - frame_width // 2
             gun_y = HEIGHT - frame_height
         else:
-            AMMO_MAX = 17
-            reload_duration = 3
+            base_mag = 17
+            mag_upgrade = weapon_upgrades.get("magazine", 0)
+            reload_level = weapon_upgrades.get("reload", 0)
+            base_reload = 3.0
+            reload_min = 1.5
+            reload_duration = max(reload_min, base_reload - reload_level * 0.5)
+            AMMO_MAX = base_mag + mag_upgrade * 3
             fire_rate = 0.25
             is_auto = False
             # Load pistol spritesheet and scale frames to 0.8
@@ -617,7 +816,7 @@ while running:
         game_over_start = None
         start_time = time.time()
         player_health = 100
-        ammo = AMMO_MAX
+        ammo = AMMO_MAX  # <-- This now uses the upgraded value
         reloading = False
         wave = 1
         score = 0
@@ -766,12 +965,13 @@ while running:
                     sys.exit()
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if quit_button_rect.collidepoint(event.pos):
-                        if show_quit_confirmation():
-                            credits += int(score)
-                            save_game(credits=credits, volume=volume)
-                            game_over = True
-                            break
+                    if game_started and not game_over:
+                        if quit_button_rect.collidepoint(event.pos):
+                            if show_quit_confirmation():
+                                credits += int(score)
+                                save_game(credits=credits, volume=volume)
+                                game_over = True
+                                break
 
                 if not game_over and game_started:
                                     mouse_down = pygame.mouse.get_pressed()[0]

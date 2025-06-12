@@ -1,1 +1,1 @@
-{"credits": 194, "volume": 0.6266666666666667, "owned_items": ["pistol", "ak"], "equipped": "ak"}
+{"credits": 87299, "volume": 0.25333333333333335, "owned_items": ["ak", "pistol"], "equipped": "ak", "upgrades": {"pistol": {"magazine": 5, "reload": 3}, "ak": {"magazine": 5, "reload": 5}}}
