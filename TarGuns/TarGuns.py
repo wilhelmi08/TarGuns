@@ -52,6 +52,11 @@ BUTTON_HOVER = (70, 170, 255)
 # Load sound
 pistol_sound = pygame.mixer.Sound("pistol.mp3")
 empty_sound = pygame.mixer.Sound("emptyPistol.mp3")
+store_entrance_sound = pygame.mixer.Sound("storeEntrance.mp3")
+store_exit_sound = pygame.mixer.Sound("storeExit.mp3")
+
+# Load store music
+STORE_MUSIC_PATH = "storeMusic.mp3"
 
 pygame.mixer.set_num_channels(12)  # Ensure at least 11 channels are available
 GUNSHOT_CHANNELS = [pygame.mixer.Channel(i) for i in range(2, 12)]  # Reserve channels 2-10 for gunshots
@@ -203,14 +208,19 @@ def start_wave(wave_num):
 def draw_menu():
     screen.fill(BLUE)
 
-    # Title
-    title_text = font_large.render("TarGuns", True, WHITE)
-    title_rect = title_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100))
-    screen.blit(title_text, title_rect)
+    # Logo (scaled to 0.3 of its original size)
+    logo_img = pygame.image.load("TarGunsLogo.png").convert_alpha()
+    logo_width, logo_height = logo_img.get_size()
+    scale_factor = 0.27
+    scaled_width = int(logo_width * scale_factor)
+    scaled_height = int(logo_height * scale_factor)
+    logo_img = pygame.transform.smoothscale(logo_img, (scaled_width, scaled_height))
+    logo_rect = logo_img.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 60))
+    screen.blit(logo_img, logo_rect)
 
     # Start button
     mouse_pos = pygame.mouse.get_pos()
-    button_rect = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2, 300, 70)
+    button_rect = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2 + 40, 300, 70)
     color = BUTTON_HOVER if button_rect.collidepoint(mouse_pos) else BUTTON_COLOR
     pygame.draw.rect(screen, color, button_rect)
 
@@ -218,12 +228,11 @@ def draw_menu():
     text_rect = button_text.get_rect(center=button_rect.center)
     screen.blit(button_text, text_rect)
 
-    # Settings button
     settings_text = font_small.render("Settings", True, TEXT_COLOR)
-    settings_rect = settings_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 100))
-    screen.blit(settings_text, settings_rect)
-    pygame.draw.rect(screen, BUTTON_COLOR, settings_rect.inflate(20, 10), border_radius=5)
-    pygame.draw.rect(screen, BUTTON_HOVER if settings_rect.collidepoint(mouse_pos) else BUTTON_COLOR, settings_rect.inflate(20, 10), 2)
+    settings_rect = settings_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 140))
+    inflated_settings_rect = settings_rect.inflate(20, 10)
+    pygame.draw.rect(screen, BUTTON_COLOR, inflated_settings_rect, border_radius=5)
+    pygame.draw.rect(screen, BUTTON_HOVER if inflated_settings_rect.collidepoint(mouse_pos) else BUTTON_COLOR, inflated_settings_rect, 2)
     screen.blit(settings_text, settings_rect)
 
     store_icon = pygame.image.load("storeIcon.png").convert_alpha()
@@ -242,30 +251,58 @@ def draw_menu():
         store_icon_darken = store_icon.copy()
         store_icon_darken.blit(darken, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         screen.blit(store_icon_darken, store_rect.topleft)
+    
+    # Quit button (lower left)
+    quit_rect = pygame.Rect(20, HEIGHT - 60, 120, 40)
+    button_surf = pygame.Surface((quit_rect.width, quit_rect.height), pygame.SRCALPHA)
+    pygame.draw.rect(button_surf, BUTTON_COLOR, button_surf.get_rect(), border_radius=8)
+    quit_text = font_small.render("Quit", True, WHITE)
+    quit_text_rect = quit_text.get_rect(center=button_surf.get_rect().center)
+    button_surf.blit(quit_text, quit_text_rect)
+    mouse_pos = pygame.mouse.get_pos()
+    mouse_pressed = pygame.mouse.get_pressed()[0]
+    if quit_rect.collidepoint(mouse_pos):
+        darken = pygame.Surface((quit_rect.width, quit_rect.height), pygame.SRCALPHA)
+        alpha = 80 if mouse_pressed else 40
+        darken.fill((0, 0, 0, alpha))
+        button_surf.blit(darken, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        # Blit the text again so it stays visible
+        button_surf.blit(quit_text, quit_text_rect)
+    screen.blit(button_surf, quit_rect.topleft)
 
     pygame.display.flip()
-    return store_rect
+    return store_rect, quit_rect, inflated_settings_rect
 
 def show_menu():
     while True:
-        store_rect = draw_menu()
+        store_rect, quit_rect, settings_rect = draw_menu()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 button_rect = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2, 300, 70)
-                settings_rect = pygame.font.SysFont(None, 40).render("Settings", True, (200, 200, 200)).get_rect(center=(WIDTH // 2, HEIGHT // 2 + 100))
-                settings_rect = settings_rect.inflate(20, 10)
                 if button_rect.collidepoint(event.pos):
                     return "start"
                 elif settings_rect.collidepoint(event.pos):
                     return "settings"
                 elif store_rect.collidepoint(event.pos):
+                    store_entrance_sound.play()
+                    store_entrance_sound.set_volume(volume)
                     return "store"
+                elif quit_rect.collidepoint(event.pos):
+                    if show_quit_confirmation():
+                        pygame.quit()
+                        sys.exit()
         clock.tick(60)
 
 def show_store():
+    # Play store music only if not already playing
+    if not pygame.mixer.music.get_busy():
+        pygame.mixer.music.load(STORE_MUSIC_PATH)
+        pygame.mixer.music.set_volume(volume)
+        pygame.mixer.music.play(-1)
+
     global credits
     # Load equipped weapon from save_data.json
     equipped = "pistol"
@@ -416,6 +453,9 @@ def show_store():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if back_rect.collidepoint(event.pos):
                     save_ownership()
+                    store_exit_sound.set_volume(volume)
+                    store_exit_sound.play()
+                    pygame.mixer.music.stop()  # Stop music when leaving store
                     return
                 # Check if any item box is clicked
                 for box_rect, item in item_boxes:
@@ -558,7 +598,7 @@ def show_upgrade_screen(equipped, owned_items):
 
         # Reload upgrade price
         reload_upgrade_text = font_small.render(f"Upgrade (-0.5s): {reload_upgrade_cost} Credits", True, TEXT_COLOR)
-        reload_upgrade_text_rect = reload_upgrade_text.get_rect(center=(center_x, y + 20))
+        reload_upgrade_text_rect = reload_upgrade_text.get_rect(center=(center_x, y))
         screen.blit(reload_upgrade_text, reload_upgrade_text_rect)
         y += spacing
 
