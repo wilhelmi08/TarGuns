@@ -91,6 +91,11 @@ gunshot_channel_idx = 0
 BOX_WIDTH, BOX_HEIGHT = 100, 100
 BOX_SPEED = 15  # Increased speed
 
+green_target_img_2 = pygame.image.load("greenTargetHealth2.png").convert_alpha()
+green_target_img_2 = pygame.transform.scale(green_target_img_2, (BOX_WIDTH -10, BOX_HEIGHT -10))
+green_target_img_1 = pygame.image.load("greenTargetHealth1.png").convert_alpha()
+green_target_img_1 = pygame.transform.scale(green_target_img_1, (BOX_WIDTH -10, BOX_HEIGHT -10))
+
 # Load and scale image
 image = pygame.image.load("target.png").convert_alpha()
 image = pygame.transform.scale(image, (BOX_WIDTH, BOX_HEIGHT))
@@ -203,22 +208,26 @@ def show_quit_confirmation():
                 elif no_rect.collidepoint(event.pos):
                     return False
 
-def spawn_box(existing_rects):
+def spawn_box(existing_rects, target_type="normal", health=1):
     max_attempts = 50
     for _ in range(max_attempts):
         start_x = random.randint(50, WIDTH - BOX_WIDTH - 50)
         new_rect = pygame.Rect(start_x, HEIGHT, BOX_WIDTH, BOX_HEIGHT)
-
-        # Check for overlap with existing targets
         if all(not new_rect.colliderect(existing) for existing in existing_rects):
+            if target_type == "green":
+                img = green_target_img_2 if health == 2 else green_target_img_1
+            else:
+                img = image
             return {
                 "rect": new_rect,
                 "target_y": random.uniform(250, 50),
                 "speed": BOX_SPEED,
-                "image": image,
-                "at_target_time": None
+                "image": img,
+                "at_target_time": None,
+                "type": target_type,
+                "health": health
             }
-    return None  # if we failed to find a good spot
+    return None
 
 def start_wave(wave_num):
     global active_targets, wave_in_progress, batch_size, batch_delay, next_batch_time
@@ -978,8 +987,25 @@ while running:
                         if next_batch_time and now >= next_batch_time and mini_waves_spawned < mini_waves_per_wave:
                             existing_rects = [t["rect"] for t in active_targets]
                             spawn_count = batch_size
-                            for _ in range(spawn_count):
-                                box = spawn_box(existing_rects)
+
+                            # Determine number of green targets for this mini-wave
+                            if wave > 10:
+                                green_count = 1 + (wave - 10)
+                            elif wave > 5:
+                                green_count = 1
+                            else:
+                                green_count = 0
+
+                            # Spawn green targets
+                            for _ in range(green_count):
+                                box = spawn_box(existing_rects, target_type="green", health=2)
+                                if box:
+                                    active_targets.append(box)
+                                    existing_rects.append(box["rect"])
+
+                            # Spawn normal targets
+                            for _ in range(spawn_count - green_count):
+                                box = spawn_box(existing_rects, target_type="normal", health=1)
                                 if box:
                                     active_targets.append(box)
                                     existing_rects.append(box["rect"])
@@ -1101,8 +1127,16 @@ while running:
                                             pos = pygame.mouse.get_pos()
                                             for target in active_targets[:]:
                                                 if target["rect"].collidepoint(pos):
-                                                    active_targets.remove(target)
-                                                    score += points_per_target
+                                                    if target.get("type") == "green":
+                                                        target["health"] -= 1
+                                                        if target["health"] == 1:
+                                                            target["image"] = green_target_img_1
+                                                        if target["health"] <= 0:
+                                                            active_targets.remove(target)
+                                                            score += points_per_target * 2  # green targets worth more
+                                                    else:
+                                                        active_targets.remove(target)
+                                                        score += points_per_target
                                                     break
                                             ammo -= 1
                                             last_shot_time = now
@@ -1119,8 +1153,16 @@ while running:
                                             pos = pygame.mouse.get_pos()
                                             for target in active_targets[:]:
                                                 if target["rect"].collidepoint(pos):
-                                                    active_targets.remove(target)
-                                                    score += points_per_target
+                                                    if target.get("type") == "green":
+                                                        target["health"] -= 1
+                                                        if target["health"] == 1:
+                                                            target["image"] = green_target_img_1
+                                                        if target["health"] <= 0:
+                                                            active_targets.remove(target)
+                                                            score += points_per_target * 2  # green targets worth more
+                                                    else:
+                                                        active_targets.remove(target)
+                                                        score += points_per_target
                                                     break
                                             ammo -= 1
                                             last_shot_time = now
