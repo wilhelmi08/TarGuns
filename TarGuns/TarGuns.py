@@ -837,7 +837,7 @@ while running:
 
     if menu_choice == "start":
         # Initialize game state
-        credits, volume = load_game()
+        credits, music_volume, sfx_volume = load_game()
         # Load equipped weapon
         equipped = "pistol"
         owned_items = {"pistol"}
@@ -945,11 +945,11 @@ while running:
             else:
                 # In your game loop, after starting the first wave:
                 if not pygame.mixer.music.get_busy():
-                    play_next_game_track(volume)
+                    play_next_game_track(music_volume)
 
                 # Also, in your main game loop, check if the music finished and play the next:
                 if game_started and not pygame.mixer.music.get_busy():
-                    play_next_game_track(volume)
+                    play_next_game_track(music_volume)
 
                 if game_over:
                     if game_over_start is None:
@@ -964,7 +964,7 @@ while running:
                     if now - game_over_start >= 5:
                         #stop music and return to menu
                         pygame.mixer.music.stop()
-                        save_game(credits=credits, volume=volume)
+                        save_game(credits=credits, music_volume=music_volume, sfx_volume=sfx_volume)
                         break
 
                 else:
@@ -1004,7 +1004,7 @@ while running:
                                     player_health -= damage_per_missed_target
                                     if player_health <= 0:
                                         credits += int(score)
-                                        save_game(credits=credits, volume=volume)
+                                        save_game(credits=credits, music_volume=music_volume, sfx_volume=sfx_volume)
                                         game_over = True
 
                             screen.blit(target["image"], rect)
@@ -1082,7 +1082,7 @@ while running:
                         if quit_button_rect.collidepoint(event.pos):
                             if show_quit_confirmation():
                                 credits += int(score)
-                                save_game(credits=credits, volume=volume)
+                                save_game(credits=credits, music_volume=music_volume, sfx_volume=sfx_volume)
                                 game_over = True
                                 pygame.mixer.music.stop()
                                 break
