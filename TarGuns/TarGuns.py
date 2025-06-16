@@ -8,17 +8,17 @@ import os
 
 pygame.init()
 
-def save_game(credits=None, volume=None):
+def save_game(credits=None, music_volume=None, sfx_volume=None):
     data = {}
     if os.path.exists("save_data.json"):
         with open("save_data.json", "r") as f:
             data = json.load(f)
-
     if credits is not None:
         data["credits"] = int(credits)
-    if volume is not None:
-        data["volume"] = float(volume)
-
+    if music_volume is not None:
+        data["music_volume"] = float(music_volume)
+    if sfx_volume is not None:
+        data["sfx_volume"] = float(sfx_volume)
     with open("save_data.json", "w") as f:
         json.dump(data, f)
 
@@ -26,10 +26,14 @@ def load_game():
     if os.path.exists("save_data.json"):
         with open("save_data.json", "r") as f:
             data = json.load(f)
-            return data.get("credits", 0), data.get("volume", 1.0)
-    return 0, 1.0
+            return (
+                data.get("credits", 0),
+                data.get("music_volume", 1.0),
+                data.get("sfx_volume", 1.0),
+            )
+    return 0, 1.0, 1.0
 
-credits, volume = load_game()
+credits, music_volume, sfx_volume = load_game()
 
 # Screen setup
 WIDTH, HEIGHT = 913, 408
@@ -57,6 +61,27 @@ store_exit_sound = pygame.mixer.Sound("storeExit.mp3")
 
 # Load store music
 STORE_MUSIC_PATH = "storeMusic.mp3"
+MENU_MUSIC_PATH = "menuMusic.mp3"
+import random
+
+# List all your game music tracks
+GAME_MUSIC_TRACKS = [
+    "track01.mp3",
+    "track02.mp3",
+    "track03.mp3",
+    # Add more as needed
+]
+
+# Shuffle at the start of the game
+random.shuffle(GAME_MUSIC_TRACKS)
+current_track_index = 0
+
+def play_next_game_track(volume):
+    global current_track_index
+    pygame.mixer.music.load(GAME_MUSIC_TRACKS[current_track_index])
+    pygame.mixer.music.set_volume(music_volume)
+    pygame.mixer.music.play()
+    current_track_index = (current_track_index + 1) % len(GAME_MUSIC_TRACKS)
 
 pygame.mixer.set_num_channels(12)  # Ensure at least 11 channels are available
 GUNSHOT_CHANNELS = [pygame.mixer.Channel(i) for i in range(2, 12)]  # Reserve channels 2-10 for gunshots
@@ -130,6 +155,13 @@ base_target_timeout = 10  # seconds before target disappears
 # Targets
 active_targets = []
 
+def play_next_game_track(volume):
+    global current_track_index
+    pygame.mixer.music.load(GAME_MUSIC_TRACKS[current_track_index])
+    pygame.mixer.music.set_volume(music_volume)
+    pygame.mixer.music.play()
+    current_track_index = (current_track_index + 1) % len(GAME_MUSIC_TRACKS)
+
 def show_quit_confirmation():
     dialog_width, dialog_height = 400, 200
     dialog_x = WIDTH // 2 - dialog_width // 2
@@ -192,18 +224,22 @@ def start_wave(wave_num):
     global active_targets, wave_in_progress, batch_size, batch_delay, next_batch_time
     global mini_waves_spawned, mini_waves_per_wave, total_targets_in_wave
 
-    mini_waves_per_wave = 3 + (wave_num - 1)  # increase mini waves per wave if you want
-    mini_waves_spawned = 0
-
-    batch_size = min(3 + (wave_num // 2), 6)
-    batch_delay = max(2.5, 6 - (wave_num * 0.5))
+    if wave_num <= 10:
+        mini_waves_per_wave = 2 + wave_num  # Wave 1: 3, Wave 2: 4, ..., Wave 10: 12
+        batch_size = min(3 + (wave_num // 2), 6)
+        batch_delay = max(2.5, 6 - (wave_num * 0.5))
+    else:
+        # Intensify after 10th wave
+        mini_waves_per_wave = 12 + (wave_num - 10) * 2  # Grows faster after wave 10
+        batch_size = min(6 + (wave_num - 10) // 2, 12)
+        batch_delay = max(0.7, 2.5 - (wave_num - 10) * 0.15)
 
     total_targets_in_wave = mini_waves_per_wave * batch_size
 
     active_targets = []
     wave_in_progress = True
-    next_batch_time = time.time()  # spawn first batch immediately
-    targets_spawned = 0
+    next_batch_time = time.time()
+    mini_waves_spawned = 0
 
 def draw_menu():
     screen.fill(BLUE)
@@ -274,6 +310,12 @@ def draw_menu():
     return store_rect, quit_rect, inflated_settings_rect
 
 def show_menu():
+    if not pygame.mixer.music.get_busy():
+        pygame.mixer.music.load(MENU_MUSIC_PATH)
+        pygame.mixer.music.set_volume(music_volume)
+        pygame.mixer.music.play(-1)
+            
+
     while True:
         store_rect, quit_rect, settings_rect = draw_menu()
         for event in pygame.event.get():
@@ -283,12 +325,14 @@ def show_menu():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 button_rect = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2, 300, 70)
                 if button_rect.collidepoint(event.pos):
+                    pygame.mixer.music.stop()
                     return "start"
                 elif settings_rect.collidepoint(event.pos):
                     return "settings"
                 elif store_rect.collidepoint(event.pos):
                     store_entrance_sound.play()
-                    store_entrance_sound.set_volume(volume)
+                    store_entrance_sound.set_volume(sfx_volume)
+                    pygame.mixer.music.stop()
                     return "store"
                 elif quit_rect.collidepoint(event.pos):
                     if show_quit_confirmation():
@@ -300,7 +344,7 @@ def show_store():
     # Play store music only if not already playing
     if not pygame.mixer.music.get_busy():
         pygame.mixer.music.load(STORE_MUSIC_PATH)
-        pygame.mixer.music.set_volume(volume)
+        pygame.mixer.music.set_volume(music_volume)
         pygame.mixer.music.play(-1)
 
     global credits
@@ -453,7 +497,7 @@ def show_store():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if back_rect.collidepoint(event.pos):
                     save_ownership()
-                    store_exit_sound.set_volume(volume)
+                    store_exit_sound.set_volume(sfx_volume)
                     store_exit_sound.play()
                     pygame.mixer.music.stop()  # Stop music when leaving store
                     return
@@ -674,51 +718,55 @@ def show_upgrade_screen(equipped, owned_items):
 
         clock.tick(60)
 
-if volume == None:
-    volume = 1.0  # Default volume if not loaded
+if music_volume is None:
+    music_volume = 1.0  # Default volume if not loaded
+
+if sfx_volume is None:
+    sfx_volume = 1.0  # Default volume if not loaded
 
 def show_settings():
-    global volume
-    dragging = False
+    global music_volume, sfx_volume
+    dragging = None  # None, "music", or "sfx"
     slider_x = WIDTH // 2 - 150
-    slider_y = HEIGHT // 2
     slider_width = 300
     slider_height = 8
     knob_radius = 15
+    slider_y_music = HEIGHT // 2 + 20
+    slider_y_sfx = HEIGHT // 2 + 100
 
-    def get_knob_pos():
-        return int(slider_x + volume * slider_width)
-    
+    def get_knob_pos(vol, y):
+        return int(slider_x + vol * slider_width), y + slider_height // 2
+
     while True:
         screen.fill(BLUE)
         settings_title = font_large.render("Settings", True, WHITE)
         screen.blit(settings_title, (WIDTH // 2 - settings_title.get_width() // 2, HEIGHT // 2 - 120))
 
-        # Volume label
-        volume_label = font_small.render("Audio Volume", True, TEXT_COLOR)
-        screen.blit(volume_label, (slider_x, slider_y - 40))
+        # Music Volume
+        music_label = font_small.render("Music Volume", True, TEXT_COLOR)
+        screen.blit(music_label, (slider_x, slider_y_music - 40))
+        pygame.draw.rect(screen, (180, 180, 180), (slider_x, slider_y_music, slider_width, slider_height), border_radius=4)
+        knob_x, knob_y = get_knob_pos(music_volume, slider_y_music)
+        pygame.draw.circle(screen, BUTTON_COLOR, (knob_x, knob_y), knob_radius)
+        percent_text = font_small.render(f"{int(music_volume * 100)}%", True, TEXT_COLOR)
+        screen.blit(percent_text, (slider_x + slider_width + 20, slider_y_music - 15))
 
-        # Draw slider bar
-        pygame.draw.rect(screen, (180, 180, 180), (slider_x, slider_y, slider_width, slider_height), border_radius=4)
-        # Draw knob
-        knob_pos = get_knob_pos()
-        pygame.draw.circle(screen, BUTTON_COLOR, (knob_pos, slider_y + slider_height // 2), knob_radius)
-        # Draw volume percent
-        percent_text = font_small.render(f"{int(volume * 100)}%", True, TEXT_COLOR)
-        screen.blit(percent_text, (slider_x + slider_width + 20, slider_y - 15))
+        # SFX Volume
+        sfx_label = font_small.render("SFX Volume", True, TEXT_COLOR)
+        screen.blit(sfx_label, (slider_x, slider_y_sfx - 40))
+        pygame.draw.rect(screen, (180, 180, 180), (slider_x, slider_y_sfx, slider_width, slider_height), border_radius=4)
+        knob_x2, knob_y2 = get_knob_pos(sfx_volume, slider_y_sfx)
+        pygame.draw.circle(screen, BUTTON_COLOR, (knob_x2, knob_y2), knob_radius)
+        percent_text2 = font_small.render(f"{int(sfx_volume * 100)}%", True, TEXT_COLOR)
+        screen.blit(percent_text2, (slider_x + slider_width + 20, slider_y_sfx - 15))
 
+        # Back button
         back_rect = pygame.Rect(20, 20, 100, 40)
-
-        # Draw the button base
         button_surf = pygame.Surface((back_rect.width, back_rect.height), pygame.SRCALPHA)
         pygame.draw.rect(button_surf, BUTTON_COLOR, button_surf.get_rect(), border_radius=8)
-
-        # Draw the text onto the button surface (centered)
         back_text = font_small.render("Back", True, WHITE)
         back_text_rect = back_text.get_rect(center=button_surf.get_rect().center)
         button_surf.blit(back_text, back_text_rect)
-
-        # Darken effect on hover or press (only non-transparent pixels)
         mouse_pos = pygame.mouse.get_pos()
         mouse_pressed = pygame.mouse.get_pressed()[0]
         if back_rect.collidepoint(mouse_pos):
@@ -726,48 +774,59 @@ def show_settings():
             alpha = 80 if mouse_pressed else 40
             darken.fill((0, 0, 0, alpha))
             button_surf.blit(darken, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            # Blit the text again so it stays visible
             button_surf.blit(back_text, back_text_rect)
-
-        # Blit the button surface to the screen
         screen.blit(button_surf, back_rect.topleft)
 
         pygame.display.flip()
 
         for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit()
-                        sys.exit()
-                    elif event.type == pygame.MOUSEBUTTONDOWN:
-                        mx, my = event.pos
-                        # Check back button
-                        if back_rect.collidepoint(mx, my):
-                            save_game(volume=volume)
-                            return
-                        # Check if knob is clicked
-                        knob_pos = get_knob_pos()
-                        if (mx - knob_pos) ** 2 + (my - (slider_y + slider_height // 2)) ** 2 <= knob_radius ** 2:
-                            dragging = True
-                        # Also allow clicking anywhere on the slider bar to set volume
-                        elif slider_x <= mx <= slider_x + slider_width and slider_y - knob_radius <= my <= slider_y + slider_height + knob_radius:
-                            volume = (mx - slider_x) / slider_width
-                            volume = max(0.0, min(1.0, volume))
-                            pistol_sound.set_volume(volume)
-                            empty_sound.set_volume(volume)
-                    elif event.type == pygame.MOUSEBUTTONUP:
-                        dragging = False
-                    elif event.type == pygame.MOUSEMOTION and dragging:
-                        mx, my = event.pos
-                        volume = (mx - slider_x) / slider_width
-                        volume = max(0.0, min(1.0, volume))
-                        pistol_sound.set_volume(volume)
-                        empty_sound.set_volume(volume)
-
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mx, my = event.pos
+                if back_rect.collidepoint(mx, my):
+                    save_game(music_volume=music_volume, sfx_volume=sfx_volume)
+                    return
+                # Music knob
+                if (mx - get_knob_pos(music_volume, slider_y_music)[0]) ** 2 + (my - get_knob_pos(music_volume, slider_y_music)[1]) ** 2 <= knob_radius ** 2:
+                    dragging = "music"
+                # SFX knob
+                elif (mx - get_knob_pos(sfx_volume, slider_y_sfx)[0]) ** 2 + (my - get_knob_pos(sfx_volume, slider_y_sfx)[1]) ** 2 <= knob_radius ** 2:
+                    dragging = "sfx"
+                # Click on music slider
+                elif slider_x <= mx <= slider_x + slider_width and slider_y_music - knob_radius <= my <= slider_y_music + slider_height + knob_radius:
+                    music_volume = (mx - slider_x) / slider_width
+                    music_volume = max(0.0, min(1.0, music_volume))
+                    pygame.mixer.music.set_volume(music_volume)
+                # Click on sfx slider
+                elif slider_x <= mx <= slider_x + slider_width and slider_y_sfx - knob_radius <= my <= slider_y_sfx + slider_height + knob_radius:
+                    sfx_volume = (mx - slider_x) / slider_width
+                    sfx_volume = max(0.0, min(1.0, sfx_volume))
+                    pistol_sound.set_volume(sfx_volume)
+                    empty_sound.set_volume(sfx_volume)
+                    store_entrance_sound.set_volume(sfx_volume)
+                    store_exit_sound.set_volume(sfx_volume)
+            elif event.type == pygame.MOUSEBUTTONUP:
+                dragging = None
+            elif event.type == pygame.MOUSEMOTION and dragging:
+                mx, my = event.pos
+                if dragging == "music":
+                    music_volume = (mx - slider_x) / slider_width
+                    music_volume = max(0.0, min(1.0, music_volume))
+                    pygame.mixer.music.set_volume(music_volume)
+                elif dragging == "sfx":
+                    sfx_volume = (mx - slider_x) / slider_width
+                    sfx_volume = max(0.0, min(1.0, sfx_volume))
+                    pistol_sound.set_volume(sfx_volume)
+                    empty_sound.set_volume(sfx_volume)
+                    store_entrance_sound.set_volume(sfx_volume)
+                    store_exit_sound.set_volume(sfx_volume)
         clock.tick(60)
 
 # Set initial volume for sounds
-pistol_sound.set_volume(volume)
-empty_sound.set_volume(volume)
+pistol_sound.set_volume(sfx_volume)
+empty_sound.set_volume(sfx_volume)
 
 game_over = False
 game_over_start = None  # Track when game over started
@@ -862,14 +921,17 @@ while running:
         score = 0
         last_shot_time = 0
 
-        pistol_sound.set_volume(volume)
-        empty_sound.set_volume(volume)
+        pistol_sound.set_volume(sfx_volume)
+        empty_sound.set_volume(sfx_volume)
 
         # Start the game
         while not game_over:
             screen.fill(BLUE)
             now = time.time()
             elapsed = now - start_time
+
+            random.shuffle(GAME_MUSIC_TRACKS)
+            current_track_index = 0
 
             # Game start countdown
             if not game_started:
@@ -881,6 +943,14 @@ while running:
                     game_started = True
                     start_wave(wave)
             else:
+                # In your game loop, after starting the first wave:
+                if not pygame.mixer.music.get_busy():
+                    play_next_game_track(volume)
+
+                # Also, in your main game loop, check if the music finished and play the next:
+                if game_started and not pygame.mixer.music.get_busy():
+                    play_next_game_track(volume)
+
                 if game_over:
                     if game_over_start is None:
                         game_over_start = now  # mark when game over began
@@ -892,6 +962,9 @@ while running:
 
                     # After 5 seconds, return to menu
                     if now - game_over_start >= 5:
+                        #stop music and return to menu
+                        pygame.mixer.music.stop()
+                        save_game(credits=credits, volume=volume)
                         break
 
                 else:
@@ -1011,6 +1084,7 @@ while running:
                                 credits += int(score)
                                 save_game(credits=credits, volume=volume)
                                 game_over = True
+                                pygame.mixer.music.stop()
                                 break
 
                 if not game_over and game_started:
