@@ -96,6 +96,9 @@ green_target_img_2 = pygame.transform.scale(green_target_img_2, (BOX_WIDTH -10, 
 green_target_img_1 = pygame.image.load("greenTargetHealth1.png").convert_alpha()
 green_target_img_1 = pygame.transform.scale(green_target_img_1, (BOX_WIDTH -10, BOX_HEIGHT -10))
 
+teleport_target_img = pygame.image.load("teleTarget.png").convert_alpha()
+teleport_target_img = pygame.transform.scale(teleport_target_img, (BOX_WIDTH - 10, BOX_HEIGHT - 10))
+
 # Load and scale image
 image = pygame.image.load("target.png").convert_alpha()
 image = pygame.transform.scale(image, (BOX_WIDTH, BOX_HEIGHT))
@@ -216,6 +219,8 @@ def spawn_box(existing_rects, target_type="normal", health=1):
         if all(not new_rect.colliderect(existing) for existing in existing_rects):
             if target_type == "green":
                 img = green_target_img_2 if health == 2 else green_target_img_1
+            elif target_type == "teleport":
+                img = teleport_target_img
             else:
                 img = image
             return {
@@ -1067,7 +1072,7 @@ while running:
         player_health = 100
         ammo = AMMO_MAX  # <-- This now uses the upgraded value
         reloading = False
-        wave = 1
+        wave = 14
         score = 0
         last_shot_time = 0
 
@@ -1130,12 +1135,25 @@ while running:
                             spawn_count = batch_size
 
                             # Determine number of green targets for this mini-wave
+                            # Determine number of green targets for this mini-wave
                             if wave > 10:
                                 green_count = 1 + (wave - 10)
                             elif wave > 5:
                                 green_count = 1
                             else:
                                 green_count = 0
+
+                            if wave > 15:
+                                teleport_count = 1 + (wave - 15) // 2  # Increase every 2 waves after 15
+                            else:
+                                teleport_count = 0
+
+                            # Spawn teleporting targets
+                            for _ in range(teleport_count):
+                                box = spawn_box(existing_rects, target_type="teleport", health=2)
+                                if box:
+                                    active_targets.append(box)
+                                    existing_rects.append(box["rect"])
 
                             # Spawn green targets
                             for _ in range(green_count):
@@ -1275,7 +1293,20 @@ while running:
                                                             target["image"] = green_target_img_1
                                                         if target["health"] <= 0:
                                                             active_targets.remove(target)
-                                                            score += points_per_target * 2  # green targets worth more
+                                                            score += points_per_target * 2
+                                                    elif target.get("type") == "teleport":
+                                                        target["health"] -= 1
+                                                        if target["health"] == 1:
+                                                            # Teleport: move to a new random position (not overlapping others)
+                                                            existing_rects = [t["rect"] for t in active_targets if t is not target]
+                                                            new_box = spawn_box(existing_rects, target_type="teleport", health=1)
+                                                            if new_box:
+                                                                target["rect"] = new_box["rect"]
+                                                                target["target_y"] = new_box["target_y"]
+                                                                target["at_target_time"] = None
+                                                        elif target["health"] <= 0:
+                                                            active_targets.remove(target)
+                                                            score += points_per_target * 3  # teleport targets worth more
                                                     else:
                                                         active_targets.remove(target)
                                                         score += points_per_target
@@ -1296,12 +1327,26 @@ while running:
                                             for target in active_targets[:]:
                                                 if target["rect"].collidepoint(pos):
                                                     if target.get("type") == "green":
-                                                        target["health"] -= 1
+                                                        dmg = 2 if equipped == "lmg" else 1
+                                                        target["health"] -= dmg
                                                         if target["health"] == 1:
                                                             target["image"] = green_target_img_1
                                                         if target["health"] <= 0:
                                                             active_targets.remove(target)
-                                                            score += points_per_target * 2  # green targets worth more
+                                                            score += points_per_target * 2
+                                                    elif target.get("type") == "teleport":
+                                                        target["health"] -= 1
+                                                        if target["health"] == 1:
+                                                            # Teleport: move to a new random position (not overlapping others)
+                                                            existing_rects = [t["rect"] for t in active_targets if t is not target]
+                                                            new_box = spawn_box(existing_rects, target_type="teleport", health=1)
+                                                            if new_box:
+                                                                target["rect"] = new_box["rect"]
+                                                                target["target_y"] = new_box["target_y"]
+                                                                target["at_target_time"] = None
+                                                        elif target["health"] <= 0:
+                                                            active_targets.remove(target)
+                                                            score += points_per_target * 3  # teleport targets worth more
                                                     else:
                                                         active_targets.remove(target)
                                                         score += points_per_target
