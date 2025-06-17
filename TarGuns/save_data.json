@@ -1,1 +1,1 @@
-{"credits": 193926, "volume": 0.20333333333333334, "owned_items": ["ak", "pistol"], "equipped": "ak", "upgrades": {"pistol": {"magazine": 5, "reload": 3}, "ak": {"magazine": 5, "reload": 5}}, "music_volume": 0.20333333333333334, "sfx_volume": 0.2}
+{"credits": 11557, "volume": 0.20333333333333334, "owned_items": ["pistol"], "equipped": "pistol", "music_volume": 0.2, "sfx_volume": 0.05333333333333334, "upgrades": {"pistol": {"magazine": 0, "reload": 0}}}

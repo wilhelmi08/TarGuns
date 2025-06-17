@@ -101,7 +101,7 @@ image = pygame.image.load("target.png").convert_alpha()
 image = pygame.transform.scale(image, (BOX_WIDTH, BOX_HEIGHT))
 
 # Countdown before game start
-countdown_duration = 5
+countdown_duration = 3
 start_time = time.time()
 game_started = False
 
@@ -144,7 +144,7 @@ if credits == None:
 wave_in_progress = False
 between_waves = False
 between_waves_start = None
-between_waves_duration = 5  # seconds
+between_waves_duration = 3  # seconds
 mini_waves_per_wave = 3  # number of mini waves (batches) per wave
 mini_waves_spawned = 0   # how many batches spawned so far
 
@@ -350,6 +350,13 @@ def show_menu():
         clock.tick(60)
 
 def show_store():
+    scroll_y = 0
+    scroll_speed = 30
+    dragging = False
+    dragged = False
+    drag_start_y = 0
+    scroll_start_y = 0
+
     # Play store music only if not already playing
     if not pygame.mixer.music.get_busy():
         pygame.mixer.music.load(STORE_MUSIC_PATH)
@@ -451,23 +458,40 @@ def show_store():
                 "id": "ak",
                 "name": "Assault Rifle",
                 "icon": "ak.png",
-                "price": 2000,
+                "price": 20000,
                 "desc": "Automatic rifle.",
                 "owned": "ak" in owned_items
+            },
+            {
+                "id": "lmg",
+                "name": "LMG",
+                "icon": "lmg.png",
+                "price": 100000,
+                "desc": "Light machine gun. Slower than AK, but deals 2 damage per shot.",
+                "owned": "lmg" in owned_items
             }
         ]
+
+        scroll_clip_rect = pygame.Rect(0, 120, WIDTH, HEIGHT - 120)
+        screen.set_clip(scroll_clip_rect)
+
+        # Split items into two rows for the shop
+        row1_items = items[:2]  # pistol, ak
+        row2_items = items[2:]  # lmg (and more if you add)
 
         item_box_width = 300
         item_box_height = 250
         spacing = 40
-        total_width = len(items) * item_box_width + (len(items) - 1) * spacing
-        start_x = WIDTH // 2 - total_width // 2
-        item_box_y = HEIGHT // 2 - item_box_height // 2 + 50
+
+        # First row (pistol, ak)
+        row1_y = 140
+        row1_total_width = len(row1_items) * item_box_width + (len(row1_items) - 1) * spacing
+        row1_start_x = WIDTH // 2 - row1_total_width // 2
 
         item_boxes = []
-        for idx, item in enumerate(items):
-            box_x = start_x + idx * (item_box_width + spacing)
-            box_rect = pygame.Rect(box_x, item_box_y, item_box_width, item_box_height)
+        for idx, item in enumerate(row1_items):
+            box_x = row1_start_x + idx * (item_box_width + spacing)
+            box_rect = pygame.Rect(box_x, row1_y + scroll_y, item_box_width, item_box_height)
             item_boxes.append((box_rect, item))
             pygame.draw.rect(screen, (30, 30, 30), box_rect, border_radius=12)
             pygame.draw.rect(screen, (200, 200, 200), box_rect, 3, border_radius=12)
@@ -478,11 +502,14 @@ def show_store():
             scaled_width = int(native_width * scale_factor)
             scaled_height = int(native_height * scale_factor)
             item_icon_scaled = pygame.transform.smoothscale(item_icon, (scaled_width, scaled_height))
-            item_icon_rect = item_icon_scaled.get_rect(center=(box_x + item_box_width // 2, item_box_y + 80))
+            # Apply scroll_y to icon Y position!
+            item_icon_rect = item_icon_scaled.get_rect(center=(box_x + item_box_width // 2, row1_y + 80 + scroll_y))
             screen.blit(item_icon_scaled, item_icon_rect)
 
             item_text = font_small.render(item["name"], True, WHITE)
             item_text_rect = item_text.get_rect(center=(box_x + item_box_width // 2, item_icon_rect.bottom + 40))
+            # Apply scroll_y to text Y position!
+            item_text_rect.y
             screen.blit(item_text, item_text_rect)
 
             # Draw price/equipped/owned
@@ -495,61 +522,135 @@ def show_store():
             else:
                 price_text = font_small.render("Free", True, TEXT_COLOR)
             price_text_rect = price_text.get_rect(center=(box_x + item_box_width // 2, item_text_rect.bottom + 20))
+            # Apply scroll_y to price text Y position!
+            price_text_rect.y
             screen.blit(price_text, price_text_rect)
+
+        if row2_items:
+            row2_y = HEIGHT // 2 + 200
+            row2_total_width = len(row2_items) * item_box_width + (len(row2_items) - 1) * spacing
+            row2_start_x = WIDTH // 2 - row2_total_width // 2
+
+            for idx, item in enumerate(row2_items):
+                box_x = row2_start_x + idx * (item_box_width + spacing)
+                box_rect = pygame.Rect(box_x, row2_y + scroll_y, item_box_width, item_box_height)
+                item_boxes.append((box_rect, item))
+                pygame.draw.rect(screen, (30, 30, 30), box_rect, border_radius=12)
+                pygame.draw.rect(screen, (200, 200, 200), box_rect, 3, border_radius=12)
+
+                item_icon = pygame.image.load(item["icon"]).convert_alpha()
+                native_width, native_height = item_icon.get_size()
+                scale_factor = 0.18
+                scaled_width = int(native_width * scale_factor)
+                scaled_height = int(native_height * scale_factor)
+                item_icon_scaled = pygame.transform.smoothscale(item_icon, (scaled_width, scaled_height))
+                # Apply scroll_y to icon Y position!
+                item_icon_rect = item_icon_scaled.get_rect(center=(box_x + item_box_width // 2, row2_y + 80 + scroll_y))
+                screen.blit(item_icon_scaled, item_icon_rect)
+
+                item_text = font_small.render(item["name"], True, WHITE)
+                item_text_rect = item_text.get_rect(center=(box_x + item_box_width // 2, item_icon_rect.bottom + 40))
+                # Apply scroll_y to text Y position!
+                item_text_rect.y
+                screen.blit(item_text, item_text_rect)
+
+                # Draw price/equipped/owned
+                if equipped == item["id"]:
+                    price_text = font_small.render("Equipped", True, (75, 255, 50))
+                elif item["owned"]:
+                    price_text = font_small.render("Owned", True, (200, 200, 200))
+                elif item["price"] > 0:
+                    price_text = font_small.render(f"Price: {item['price']} Credits", True, TEXT_COLOR)
+                else:
+                    price_text = font_small.render("Free", True, TEXT_COLOR)
+                price_text_rect = price_text.get_rect(center=(box_x + item_box_width // 2, item_text_rect.bottom + 20))
+                # Apply scroll_y to price text Y position!
+                price_text_rect.y
+                screen.blit(price_text, price_text_rect)
+
+        screen.set_clip(None)
+
+        # Clamp scroll_y so the top row is always fully visible by default
+        min_scroll = min(-200, HEIGHT - (row2_y + item_box_height + 100))
+        max_scroll = 0
+        scroll_y = max(min_scroll, min(scroll_y, max_scroll))
 
         pygame.display.flip()
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if back_rect.collidepoint(event.pos):
-                    save_ownership()
-                    store_exit_sound.set_volume(sfx_volume)
-                    store_exit_sound.play()
-                    pygame.mixer.music.stop()  # Stop music when leaving store
-                    return
-                # Check if any item box is clicked
-                for box_rect, item in item_boxes:
-                    if box_rect.collidepoint(event.pos):
-                        if equipped == item["id"]:
-                            show_upgrade_screen(equipped, owned_items)
-                        elif not item["owned"]:
-                            if show_purchase_dialog(item):
-                                if credits >= item["price"]:
-                                    credits -= item["price"]
-                                    owned_items.add(item["id"])
-                                    save_ownership()
-                                else:
-                                    # ...existing not enough credits dialog...
-                                    dialog_width, dialog_height = 350, 120
-                                    dialog_x = WIDTH // 2 - dialog_width // 2
-                                    dialog_y = HEIGHT // 2 - dialog_height // 2
-                                    ok_rect = pygame.Rect(dialog_x + dialog_width // 2 - 50, dialog_y + 60, 100, 40)
-                                    while True:
-                                        pygame.draw.rect(screen, (30, 30, 30), (dialog_x, dialog_y, dialog_width, dialog_height), border_radius=12)
-                                        pygame.draw.rect(screen, (200, 200, 200), (dialog_x, dialog_y, dialog_width, dialog_height), 3, border_radius=12)
-                                        msg = font_small.render("Not enough credits!", True, (255, 80, 80))
-                                        screen.blit(msg, (dialog_x + 30, dialog_y + 30))
-                                        pygame.draw.rect(screen, BUTTON_COLOR, ok_rect, border_radius=8)
-                                        ok_text = font_small.render("OK", True, WHITE)
-                                        screen.blit(ok_text, ok_rect.move((ok_rect.width - ok_text.get_width()) // 2, (ok_rect.height - ok_text.get_height()) // 2))
-                                        pygame.display.update()
-                                        for e in pygame.event.get():
-                                            if e.type == pygame.QUIT:
-                                                pygame.quit()
-                                                sys.exit()
-                                            elif e.type == pygame.MOUSEBUTTONDOWN:
-                                                if ok_rect.collidepoint(e.pos):
-                                                    break
-                                        else:
-                                            continue
-                                        break
-                        elif item["owned"]:
-                            # Equip the weapon if owned
-                            equipped = item["id"]
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if scroll_clip_rect.collidepoint(event.pos):
+                            dragging = True
+                            dragged = False
+                            drag_start_y = event.pos[1]
+                            scroll_start_y = scroll_y
+                        # Check back button (always clickable)
+                        if back_rect.collidepoint(event.pos):
                             save_ownership()
+                            store_exit_sound.set_volume(sfx_volume)
+                            store_exit_sound.play()
+                            pygame.mixer.music.stop()
+                            return
+
+                    elif event.type == pygame.MOUSEMOTION:
+                        if dragging:
+                            dy = event.pos[1] - drag_start_y
+                            if abs(dy) > 5:
+                                dragged = True
+                            if dragged:
+                                scroll_y = scroll_start_y + dy
+
+                    elif event.type == pygame.MOUSEBUTTONUP:
+                        if dragging and not dragged:
+                            # Only treat as a click if not dragged
+                            for box_rect, item in item_boxes:
+                                if box_rect.collidepoint(event.pos):
+                                    if equipped == item["id"]:
+                                        show_upgrade_screen(equipped, owned_items)
+                                    elif not item["owned"]:
+                                        if show_purchase_dialog(item):
+                                            if credits >= item["price"]:
+                                                credits -= item["price"]
+                                                owned_items.add(item["id"])
+                                                save_ownership()
+                                            else:
+                                                # Not enough credits dialog
+                                                dialog_width, dialog_height = 350, 120
+                                                dialog_x = WIDTH // 2 - dialog_width // 2
+                                                dialog_y = HEIGHT // 2 - dialog_height // 2
+                                                ok_rect = pygame.Rect(dialog_x + dialog_width // 2 - 50, dialog_y + 60, 100, 40)
+                                                while True:
+                                                    pygame.draw.rect(screen, (30, 30, 30), (dialog_x, dialog_y, dialog_width, dialog_height), border_radius=12)
+                                                    pygame.draw.rect(screen, (200, 200, 200), (dialog_x, dialog_y, dialog_width, dialog_height), 3, border_radius=12)
+                                                    msg = font_small.render("Not enough credits!", True, (255, 80, 80))
+                                                    screen.blit(msg, (dialog_x + 30, dialog_y + 30))
+                                                    pygame.draw.rect(screen, BUTTON_COLOR, ok_rect, border_radius=8)
+                                                    ok_text = font_small.render("OK", True, WHITE)
+                                                    screen.blit(ok_text, ok_rect.move((ok_rect.width - ok_text.get_width()) // 2, (ok_rect.height - ok_text.get_height()) // 2))
+                                                    pygame.display.update()
+                                                    for e in pygame.event.get():
+                                                        if e.type == pygame.QUIT:
+                                                            pygame.quit()
+                                                            sys.exit()
+                                                        elif e.type == pygame.MOUSEBUTTONDOWN:
+                                                            if ok_rect.collidepoint(e.pos):
+                                                                break
+                                                    else:
+                                                        continue
+                                                    break
+                                    elif item["owned"]:
+                                        equipped = item["id"]
+                                        save_ownership()
+                            # (Back button handled above)
+                        dragging = False
+                        dragged = False
+
+                    elif event.type == pygame.MOUSEWHEEL:
+                        scroll_y += event.y * scroll_speed
         clock.tick(60)
 
 def show_upgrade_screen(equipped, owned_items):
@@ -563,9 +664,19 @@ def show_upgrade_screen(equipped, owned_items):
     weapon_upgrades = upgrades.get(equipped, {"magazine": 0, "reload": 0})
 
     # Upgrade parameters
-    base_magazine = 17 if equipped == "pistol" else 30
-    base_reload = 3.0 if equipped == "pistol" else 5.0
-    reload_min = 1.5 if equipped == "pistol" else 2.5
+    if equipped == "pistol":
+        base_magazine = 17
+        base_reload = 3.0
+        reload_min = 1.5
+    elif equipped == "ak":
+        base_magazine = 30
+        base_reload = 5.0
+        reload_min = 2.0
+    else:
+        base_magazine = 60
+        base_reload = 7.0
+        reload_min = 3.0
+
     mag_upgrade_cost = 500 * (weapon_upgrades.get("magazine", 0) + 1)
     reload_upgrade_cost = 700 * (weapon_upgrades.get("reload", 0) + 1)
     max_mag_upgrade = 5
@@ -889,6 +1000,36 @@ while running:
             frame_height = int(frame_height * scale_factor)
             gun_x = WIDTH // 2 - frame_width // 2
             gun_y = HEIGHT - frame_height
+        elif equipped == "lmg":
+            base_mag = 60
+            mag_upgrade = weapon_upgrades.get("magazine", 0)
+            reload_level = weapon_upgrades.get("reload", 0)
+            base_reload = 6.0
+            reload_min = 3.0
+            reload_duration = max(reload_min, base_reload - reload_level * 0.5)
+            AMMO_MAX = base_mag + mag_upgrade * 3
+            fire_rate = 0.12  # slower than AK
+            is_auto = True
+            lmg_damage = 2
+            # Load LMG spritesheet and scale frames as needed
+            gun_sprite_sheet = pygame.image.load("lmgAnimation.png").convert_alpha()
+            frame_width = 296
+            frame_height = 454
+            num_frames = 2
+            scale_factor = 0.5
+            gun_fire_frames = []
+            for i in range(num_frames):
+                rect = pygame.Rect(i * frame_width, 0, frame_width, frame_height)
+                frame = gun_sprite_sheet.subsurface(rect)
+                scaled_frame = pygame.transform.smoothscale(
+                    frame,
+                    (int(frame_width * scale_factor), int(frame_height * scale_factor))
+                )
+                gun_fire_frames.append(scaled_frame)
+            frame_width = int(frame_width * scale_factor)
+            frame_height = int(frame_height * scale_factor)
+            gun_x = WIDTH // 2 - frame_width // 2
+            gun_y = HEIGHT - frame_height
         else:
             base_mag = 17
             mag_upgrade = weapon_upgrades.get("magazine", 0)
@@ -1128,7 +1269,8 @@ while running:
                                             for target in active_targets[:]:
                                                 if target["rect"].collidepoint(pos):
                                                     if target.get("type") == "green":
-                                                        target["health"] -= 1
+                                                        dmg = 2 if equipped == "lmg" else 1
+                                                        target["health"] -= dmg
                                                         if target["health"] == 1:
                                                             target["image"] = green_target_img_1
                                                         if target["health"] <= 0:
