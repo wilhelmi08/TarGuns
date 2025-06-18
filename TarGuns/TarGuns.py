@@ -92,16 +92,16 @@ BOX_WIDTH, BOX_HEIGHT = 100, 100
 BOX_SPEED = 15  # Increased speed
 
 green_target_img_2 = pygame.image.load("greenTargetHealth2.png").convert_alpha()
-green_target_img_2 = pygame.transform.scale(green_target_img_2, (BOX_WIDTH -10, BOX_HEIGHT -10))
+green_target_img_2 = pygame.transform.scale(green_target_img_2, (BOX_WIDTH - 10, BOX_HEIGHT - 10))
 green_target_img_1 = pygame.image.load("greenTargetHealth1.png").convert_alpha()
-green_target_img_1 = pygame.transform.scale(green_target_img_1, (BOX_WIDTH -10, BOX_HEIGHT -10))
+green_target_img_1 = pygame.transform.scale(green_target_img_1, (BOX_WIDTH - 10, BOX_HEIGHT - 10))
 
 teleport_target_img = pygame.image.load("teleTarget.png").convert_alpha()
 teleport_target_img = pygame.transform.scale(teleport_target_img, (BOX_WIDTH - 10, BOX_HEIGHT - 10))
 
 # Load and scale image
 image = pygame.image.load("target.png").convert_alpha()
-image = pygame.transform.scale(image, (BOX_WIDTH, BOX_HEIGHT))
+image = pygame.transform.scale(image, (BOX_WIDTH - 10, BOX_HEIGHT - 10))
 
 # Countdown before game start
 countdown_duration = 3
@@ -949,6 +949,110 @@ def show_settings():
                     store_exit_sound.set_volume(sfx_volume)
         clock.tick(60)
 
+def show_debug_screen():
+    global credits, wave
+    # Load owned items
+    if os.path.exists("save_data.json"):
+        with open("save_data.json", "r") as f:
+            data = json.load(f)
+            owned_items = set(data.get("owned_items", ["pistol"]))
+    else:
+        owned_items = {"pistol"}
+
+    input_active = None  # "credits", "wave"
+    input_text = {"credits": str(credits), "wave": str(wave)}
+    gun_list = ["pistol", "ak", "lmg"]
+    gun_boxes = []
+    running = True
+
+    while running:
+        screen.fill((30, 30, 30))
+        title = font_large.render("DEBUG", True, (255, 255, 0))
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 40))
+
+        # Credits input
+        credits_label = font_small.render("Credits:", True, WHITE)
+        screen.blit(credits_label, (100, 150))
+        credits_box = pygame.Rect(250, 150, 120, 40)
+        pygame.draw.rect(screen, (50, 50, 50), credits_box)
+        pygame.draw.rect(screen, (255, 255, 0) if input_active == "credits" else WHITE, credits_box, 2)
+        credits_val = font_small.render(input_text["credits"], True, WHITE)
+        screen.blit(credits_val, (credits_box.x + 10, credits_box.y + 5))
+
+        # Wave input
+        wave_label = font_small.render("Start Wave:", True, WHITE)
+        screen.blit(wave_label, (100, 210))
+        wave_box = pygame.Rect(250, 210, 120, 40)
+        pygame.draw.rect(screen, (50, 50, 50), wave_box)
+        pygame.draw.rect(screen, (255, 255, 0) if input_active == "wave" else WHITE, wave_box, 2)
+        wave_val = font_small.render(input_text["wave"], True, WHITE)
+        screen.blit(wave_val, (wave_box.x + 10, wave_box.y + 5))
+
+        # Owned guns checkboxes
+        gun_boxes.clear()
+        gun_label = font_small.render("Owned Guns:", True, WHITE)
+        screen.blit(gun_label, (100, 280))
+        for i, gun in enumerate(gun_list):
+            box = pygame.Rect(250, 280 + i * 50, 40, 40)
+            pygame.draw.rect(screen, (50, 50, 50), box)
+            pygame.draw.rect(screen, WHITE, box, 2)
+            if gun in owned_items:
+                pygame.draw.line(screen, (0, 255, 0), (box.left+5, box.centery), (box.centerx, box.bottom-5), 4)
+                pygame.draw.line(screen, (0, 255, 0), (box.centerx, box.bottom-5), (box.right-5, box.top+5), 4)
+            gun_text = font_small.render(gun.upper(), True, WHITE)
+            screen.blit(gun_text, (box.right + 10, box.y + 5))
+            gun_boxes.append((box, gun))
+
+        # Save & Exit button
+        save_rect = pygame.Rect(WIDTH // 2 - 80, HEIGHT - 80, 160, 50)
+        pygame.draw.rect(screen, BUTTON_COLOR, save_rect, border_radius=8)
+        save_text = font_small.render("Save & Exit", True, WHITE)
+        save_text_rect = save_text.get_rect(center=save_rect.center)
+        screen.blit(save_text, save_text_rect)
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if credits_box.collidepoint(event.pos):
+                    input_active = "credits"
+                elif wave_box.collidepoint(event.pos):
+                    input_active = "wave"
+                else:
+                    input_active = None
+                for box, gun in gun_boxes:
+                    if box.collidepoint(event.pos):
+                        if gun in owned_items:
+                            owned_items.remove(gun)
+                        else:
+                            owned_items.add(gun)
+                if save_rect.collidepoint(event.pos):
+                    # Save changes
+                    credits = int(input_text["credits"])
+                    wave = int(input_text["wave"])
+                    # Save to file
+                    if os.path.exists("save_data.json"):
+                        with open("save_data.json", "r") as f:
+                            data = json.load(f)
+                    else:
+                        data = {}
+                    data["credits"] = credits
+                    data["owned_items"] = list(owned_items)
+                    with open("save_data.json", "w") as f:
+                        json.dump(data, f)
+                    running = False
+            elif event.type == pygame.KEYDOWN and input_active:
+                if event.key == pygame.K_BACKSPACE:
+                    input_text[input_active] = input_text[input_active][:-1]
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    input_active = None
+                elif event.unicode.isdigit():
+                    input_text[input_active] += event.unicode
+        clock.tick(60)
+
 # Set initial volume for sounds
 pistol_sound.set_volume(sfx_volume)
 empty_sound.set_volume(sfx_volume)
@@ -1072,7 +1176,7 @@ while running:
         player_health = 100
         ammo = AMMO_MAX  # <-- This now uses the upgraded value
         reloading = False
-        wave = 14
+        wave = 1
         score = 0
         last_shot_time = 0
 
@@ -1097,7 +1201,28 @@ while running:
                 if elapsed >= countdown_duration:
                     game_started = True
                     start_wave(wave)
+
+                keys = pygame.key.get_pressed()
+                mods = pygame.key.get_mods()
+                if (
+                    mods & pygame.KMOD_CTRL
+                    and mods & pygame.KMOD_SHIFT
+                    and mods & pygame.KMOD_ALT
+                    and pygame.key.get_pressed()[pygame.K_SCROLLLOCK]
+                ):
+                    show_debug_screen()
+
             else:
+                keys = pygame.key.get_pressed()
+                mods = pygame.key.get_mods()
+                if (
+                    mods & pygame.KMOD_CTRL
+                    and mods & pygame.KMOD_SHIFT
+                    and mods & pygame.KMOD_ALT
+                    and pygame.key.get_pressed()[pygame.K_SCROLLLOCK]
+                ):
+                    show_debug_screen()
+
                 # In your game loop, after starting the first wave:
                 if not pygame.mixer.music.get_busy():
                     play_next_game_track(music_volume)
